@@ -105,8 +105,10 @@ while any(fillRegion(:))
   toFill = fillRegion(Hp);
   
   % Find exemplar that minimizes error, Hq
-  % Hq = bestexemplar(img,img(rows,cols,:),toFill',sourceRegion);
-  [Hq, rowsq, colsq] = bestexemplar_depth(img, depth, img(rows,cols,:), depth(rows,cols), toFill', sourceRegion);
+  [Hq, rowsq, colsq] = bestexemplar(img,img(rows,cols,:),depth_gradient, depth_gradient(rows,cols,:),toFill',sourceRegion);
+%  [Hq, rowsq, colsq] = bestexemplar(img,img(rows,cols,:),depth, depth(rows,cols),toFill',sourceRegion);
+
+  % [Hq, rowsq, colsq] = bestexemplar_depth(img, depth, img(rows,cols,:), depth(rows,cols), toFill', sourceRegion);
   
   % Update fill region
   toFill = logical(toFill);                 % Marcel 11/30/05
@@ -123,12 +125,12 @@ while any(fillRegion(:))
   depth(rows,cols) = origDepth(ind(rows,cols));
   depth_gradient(rows,cols,:) = ind2img_n(ind(rows,cols),origGradient,2);
   
-  % high resolution
-  rows_hd = floor(rows(1)/scaleFactor):floor(rows(1)/scaleFactor)+floor(length(rows)/scaleFactor) - 1;
-  cols_hd = floor(cols(1)/scaleFactor):floor(cols(1)/scaleFactor)+floor(length(cols)/scaleFactor) - 1;
-  rowsq_hd = floor(rowsq(1)/scaleFactor):floor(rowsq(1)/scaleFactor)+floor(length(rowsq)/scaleFactor) - 1;
-  colsq_hd = floor(colsq(1)/scaleFactor):floor(colsq(1)/scaleFactor)+floor(length(colsq)/scaleFactor) - 1;
-  ind_hd(rows_hd, cols_hd) = ind_hd(rowsq_hd, colsq_hd);
+%   % high resolution
+%   rows_hd = floor(rows(1)/scaleFactor):floor(rows(1)/scaleFactor)+floor(length(rows)/scaleFactor) - 1;
+%   cols_hd = floor(cols(1)/scaleFactor):floor(cols(1)/scaleFactor)+floor(length(cols)/scaleFactor) - 1;
+%   rowsq_hd = floor(rowsq(1)/scaleFactor):floor(rowsq(1)/scaleFactor)+floor(length(rowsq)/scaleFactor) - 1;
+%   colsq_hd = floor(colsq(1)/scaleFactor):floor(colsq(1)/scaleFactor)+floor(length(colsq)/scaleFactor) - 1;
+%   ind_hd(rows_hd, cols_hd) = ind_hd(rowsq_hd, colsq_hd);
   
   % Visualization stuff
   if nargout==6
@@ -159,10 +161,12 @@ imshow(depth_gradient(:,:,1));
 % Scans over the entire image (with a sliding window)
 % for the exemplar with the lowest error. Calls a MEX function.
 %---------------------------------------------------------------------
-function Hq = bestexemplar(img,Ip,toFill,sourceRegion)
+function [Hq rows cols] = bestexemplar(img,Ip,depth,Dp,toFill,sourceRegion)
 m=size(Ip,1); mm=size(img,1); n=size(Ip,2); nn=size(img,2);
-best = bestexemplarhelper(mm,nn,m,n,img,Ip,toFill,sourceRegion);
+best = bestexemplarhelper(mm,nn,m,n,img,Ip,depth,Dp,toFill,sourceRegion);
 Hq = sub2ndx(best(1):best(2),(best(3):best(4))',mm);
+rows = best(1):best(2);
+cols = best(3):best(4);
 
 % New bestexemplar
 

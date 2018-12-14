@@ -18,7 +18,7 @@ void bestexemplarhelper(const int mm, const int nn, const int m, const int n,
 {
   register int i,j,ii,jj,ii2,jj2,M,N,I,J,ndx,ndx2,mn=m*n,mmnn=mm*nn;
   double patchErr=0.0,err=0.0,bestErr=1000000000.0;
-  const double alpha = 1.0;
+  const double alpha = 1.54e-3;
   /* foreach patch */
   N=nn-n+1;  M=mm-m+1;    // Search window boundary.
   for (j=1; j<=N; ++j) {  // For each column..
@@ -35,9 +35,9 @@ void bestexemplarhelper(const int mm, const int nn, const int m, const int n,
 	  ndx2=ii2-1+m*(jj2-1);
 	  if (!toFill[ndx2]) {
 	    err=img[ndx      ] - Ip[ndx2    ]; patchErr += err*err;
-	    err=depth[ndx      ] - depth[ndx2    ]; patchErr += alpha*err*err;
+	    err=depth[ndx      ] - Dp[ndx2    ]; patchErr += alpha*err*err;
 	    err=img[ndx+=mmnn] - Ip[ndx2+=mn]; patchErr += err*err;
-	    err=depth[ndx] - depth[ndx2]; patchErr += alpha*err*err;
+	    err=depth[ndx] - Dp[ndx2]; patchErr += alpha*err*err;
 	    err=img[ndx+=mmnn] - Ip[ndx2+=mn]; patchErr += err*err;
 	  }
 	}
