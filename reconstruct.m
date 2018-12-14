@@ -18,28 +18,75 @@ function [filledDepth] = reconstruct(depth, fillRegion, Dx, Dy)
             if fillRegion(i,j) == 0
                 continue;
             end
-            b_temp(i,j) = Dxx(i,j) + Dyy(i,j); 
+            
             row = zeros(H,W);
-            row(i,j) = -4;
-            if fillRegion(i+1,j) == 0
-                b_temp(i,j) = b_temp(i,j) - depth(i+1,j);
+            % Vertical
+            if i == 1
+                % D^(2,j) - D^(1,j) = Dy(1,j)
+                row(i,j) = row(i,j) - 1;
+                b_temp(i,j) = b_temp(i,j) + Dy(i,j);
+                if fillRegion(i+1,j) == 0
+                    b_temp(i,j) = b_temp(i,j) - depth(i+1,j);
+                else
+                    row(i+1,j) = 1;
+                end
+            elseif i == H
+                % - D^(H,j) + D^(H-1,j) = - Dy(H,j)
+                row(i,j) = row(i,j) - 1;
+                b_temp(i,j) = b_temp(i,j) - Dy(i,j);
+                if fillRegion(i-1,j) == 0
+                    b_temp(i,j) = b_temp(i,j) - depth(i-1,j);
+                else
+                    row(i-1,j) = 1;
+                end
             else
-                row(i+1,j) = 1;
+                % D^(i-1,j) + D^(i+1,j) - 2D^(i,j) = Dyy(i,j)
+                row(i,j) = row(i,j) - 2;
+                b_temp(i,j) = b_temp(i,j) + Dyy(i,j);
+                if fillRegion(i+1,j) == 0
+                    b_temp(i,j) = b_temp(i,j) - depth(i+1,j);
+                else
+                    row(i+1,j) = 1;
+                end
+                if fillRegion(i-1,j) == 0
+                    b_temp(i,j) = b_temp(i,j) - depth(i-1,j);
+                else
+                    row(i-1,j) = 1;
+                end
             end
-            if fillRegion(i-1,j) == 0
-                b_temp(i,j) = b_temp(i,j) - depth(i-1,j);
+            % Horizontal
+            if j == 1
+                % D^(i,j+1) - D^(i,j) = Dx(i,j)
+                row(i,j) = row(i,j) - 1;
+                b_temp(i,j) = b_temp(i,j) + Dx(i,j);
+                if fillRegion(i,j+1) == 0
+                    b_temp(i,j) = b_temp(i,j) - depth(i,j+1);
+                else
+                    row(i,j+1) = 1;
+                end
+            elseif j == W
+                % - D^(i,j) + D^(i,j-1) = - Dx(i,j)
+                row(i,j) = row(i,j) - 1;
+                b_temp(i,j) = b_temp(i,j) - Dx(i,j);
+                if fillRegion(i,j-1) == 0
+                    b_temp(i,j) = b_temp(i,j) - depth(i,j-1);
+                else
+                    row(i,j-1) = 1;
+                end
             else
-                row(i-1,j) = 1;
-            end
-            if fillRegion(i,j+1) == 0
-                b_temp(i,j) = b_temp(i,j) - depth(i,j+1);
-            else
-                row(i,j+1) = 1;
-            end
-            if fillRegion(i,j-1) == 0
-                b_temp(i,j) = b_temp(i,j) - depth(i,j-1);
-            else
-                row(i,j-1) = 1;
+                % D^(i,j-1) + D^(i,j+1) - 2D^(i,j) = Dxx(i,j)
+                row(i,j) = row(i,j) - 2;
+                b_temp(i,j) = b_temp(i,j) + Dxx(i,j);
+                if fillRegion(i,j+1) == 0
+                    b_temp(i,j) = b_temp(i,j) - depth(i,j+1);
+                else
+                    row(i,j+1) = 1;
+                end
+                if fillRegion(i,j-1) == 0
+                    b_temp(i,j) = b_temp(i,j) - depth(i,j-1);
+                else
+                    row(i,j-1) = 1;
+                end
             end
             A_temp(i,j,:) = row(fillRegion);
         end
@@ -54,7 +101,6 @@ function [filledDepth] = reconstruct(depth, fillRegion, Dx, Dy)
     estimatedDepth = A\b;
     filledDepth = depth;
     filledDepth(fillRegion) = estimatedDepth;
-    
     % error = sum(sum(sqrt((depth - filledDepth).^2)));
 end
 
