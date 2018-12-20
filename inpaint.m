@@ -17,7 +17,7 @@ function [inpaintedImg,origImg,fillImg,C,D,fillMovie] = inpaint(imgFilename,dept
 %   fillMovie      A Matlab movie struct depicting the fill region over time. 
 %
 % Example:
-%   [i1,i2,i3,c,d,mov] = inpaint('bungee0.png','bungee1.png',[0 255 0]);
+%   [i1,i2,i3,c,d,mov] = inpaint('img.png','depth.png','mask.png',[0 255 0],scale);
 %   plotall;           % quick and dirty plotting script
 %   close; movie(mov); % grab some popcorn 
 %
@@ -40,6 +40,8 @@ depth = double(depth);
 origImg = img;
 origDepth = depth;
 origFillRegion = fillRegion;
+H_hd = size(origImg, 1);
+W_hd = size(origImg, 2);
 
 % Gradient map
 [Dx Dy] = gradient(depth);
@@ -57,7 +59,9 @@ sourceRegion = ~fillRegion;
 [Ix(:,:,2) Iy(:,:,2)] = gradient(img(:,:,2));
 [Ix(:,:,1) Iy(:,:,1)] = gradient(img(:,:,1));
 Ix = sum(Ix,3)/(3*255); Iy = sum(Iy,3)/(3*255);
-temp = Ix; Ix = -Iy; Iy = temp;  % Rotate gradient 90 degrees
+temp = Ix; Ix = -Iy; Iy = temp;  % Rotate gradient 90 degrees to get isophote
+
+IDx = -Dy; IDy = Dx; % Isophote of depth
 
 % Initialize confidence and data terms
 C = double(sourceRegion);
@@ -73,6 +77,8 @@ end
 
 % Seed 'rand' for reproducible results (good for testing)
 rand('state',0);
+% Parameter for priority: lambda * RGB + (1 - lambda) * depth
+lambda = 0.8;
 
 % Loop until entire fill region has been covered
 while any(fillRegion(:))
@@ -95,7 +101,8 @@ while any(fillRegion(:))
   end
   
   % Compute patch priorities = confidence term * data term
-  D(dR) = abs(Ix(dR).*N(:,1)+Iy(dR).*N(:,2)) + 0.001;      % Added a little constant to data term.
+  % D(dR) = abs(Ix(dR).*N(:,1)+Iy(dR).*N(:,2)) + 0.001;      % Added a little constant to data term.
+  D(dR) = lambda * abs(Ix(dR).*N(:,1)+Iy(dR).*N(:,2)) + (1-lambda) * abs(IDx(dR).*N(:,1)+IDy(dR).*N(:,2)) + 0.001;        % Modified data term for depth. 
   priorities = C(dR).* D(dR);
   
   % Find patch with maximum priority, Hp
@@ -105,7 +112,7 @@ while any(fillRegion(:))
   toFill = fillRegion(Hp);
   
   % Find exemplar that minimizes error, Hq
-  [Hq, rowsq, colsq] = bestexemplar(img,img(rows,cols,:),depth_gradient, depth_gradient(rows,cols,:),toFill',sourceRegion);
+  [Hq, rowsq, colsq] = bestexemplar(img,img(rows,cols,:),depth_gradient, depth_gradient(rows,cols,:),toFill',sourceRegion, rows(1), cols(1));
 %  [Hq, rowsq, colsq] = bestexemplar(img,img(rows,cols,:),depth, depth(rows,cols),toFill',sourceRegion);
 
   % [Hq, rowsq, colsq] = bestexemplar_depth(img, depth, img(rows,cols,:), depth(rows,cols), toFill', sourceRegion);
@@ -125,12 +132,12 @@ while any(fillRegion(:))
   depth(rows,cols) = origDepth(ind(rows,cols));
   depth_gradient(rows,cols,:) = ind2img_n(ind(rows,cols),origGradient,2);
   
-%   % high resolution
-%   rows_hd = floor(rows(1)/scaleFactor):floor(rows(1)/scaleFactor)+floor(length(rows)/scaleFactor) - 1;
-%   cols_hd = floor(cols(1)/scaleFactor):floor(cols(1)/scaleFactor)+floor(length(cols)/scaleFactor) - 1;
-%   rowsq_hd = floor(rowsq(1)/scaleFactor):floor(rowsq(1)/scaleFactor)+floor(length(rowsq)/scaleFactor) - 1;
-%   colsq_hd = floor(colsq(1)/scaleFactor):floor(colsq(1)/scaleFactor)+floor(length(colsq)/scaleFactor) - 1;
-%   ind_hd(rows_hd, cols_hd) = ind_hd(rowsq_hd, colsq_hd);
+  % high resolution
+  rows_hd = floor(rows(1)/scaleFactor)-1:floor(rows(1)/scaleFactor)+floor((length(rows)-1)/scaleFactor);
+  cols_hd = floor(cols(1)/scaleFactor)-1:floor(cols(1)/scaleFactor)+floor((length(cols)-1)/scaleFactor);
+  rowsq_hd = floor(rowsq(1)/scaleFactor)-1:floor(rowsq(1)/scaleFactor)+floor((length(rowsq)-1)/scaleFactor);
+  colsq_hd = floor(colsq(1)/scaleFactor)-1:floor(colsq(1)/scaleFactor)+floor((length(colsq)-1)/scaleFactor);
+  ind_hd(rows_hd, cols_hd) = ind_hd(rowsq_hd, colsq_hd);
   
   % Visualization stuff
   if nargout==6
@@ -145,25 +152,28 @@ end
 
 inpaintedImg=img;
 
+% Depth
 reconstructedDepth = reconstruct(depth, origFillRegion, depth_gradient(:,:,1), depth_gradient(:,:,2));
+reconstructedDepthScaled = imresize(reconstructedDepth, 'OutputSize', size(depth_hd));
+fillDepth = depth_hd;
+fillDepth(fillRegion_hd) = reconstructedDepthScaled(fillRegion_hd);
 
-imwrite(uint16(reconstructedDepth), 'recDepth.png');
+imwrite(uint8(fillDepth), strcat('inpainted_', depthFilename));
 % High resolution
-% inpaintedImgHD=ind2img(ind_hd, img_hd);
+inpaintedImgHD=ind2img(ind_hd, img_hd);
 
-imwrite(uint8(inpaintedImg), 'output.png');
-imwrite(uint16(depth), 'output_depth.png');
+imwrite(uint8(inpaintedImgHD), strcat('inpainted_', imgFilename));
 % imwrite(uint8(inpaintedImgHD), 'output_hd.png');
 
-imshow(depth_gradient(:,:,1));
+% imshow(depth_gradient(:,:,1));
 
 %---------------------------------------------------------------------
 % Scans over the entire image (with a sliding window)
 % for the exemplar with the lowest error. Calls a MEX function.
 %---------------------------------------------------------------------
-function [Hq rows cols] = bestexemplar(img,Ip,depth,Dp,toFill,sourceRegion)
+function [Hq rows cols] = bestexemplar(img,Ip,depth,Dp,toFill,sourceRegion,center_y,center_x)
 m=size(Ip,1); mm=size(img,1); n=size(Ip,2); nn=size(img,2);
-best = bestexemplarhelper(mm,nn,m,n,img,Ip,depth,Dp,toFill,sourceRegion);
+best = bestexemplarhelper(mm,nn,m,n,img,Ip,depth,Dp,toFill,sourceRegion,center_y, center_x);
 Hq = sub2ndx(best(1):best(2),(best(3):best(4))',mm);
 rows = best(1):best(2);
 cols = best(3):best(4);
@@ -251,6 +261,12 @@ s=size(img); ind=reshape(1:s(1)*s(2),s(1),s(2));
 function [img,depth,fillImg,fillRegion] = loadimgs(imgFilename,depthFilename,fillFilename,fillColor,scaleFactor)
 img = imread(imgFilename); fillImg = imread(fillFilename);
 depth = imread(depthFilename);
+
+% NYU Depth crop
+
+img = img(7:474, 8:632, :);
+fillImg = fillImg(7:474, 8:632, :);
+depth = depth(7:474, 8:632);
 
 if(size(fillImg,3)>1)
     fillRegion = fillImg(:,:,1)==fillColor(1) & fillImg(:,:,2)==fillColor(2) & fillImg(:,:,3)==fillColor(3);

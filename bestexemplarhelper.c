@@ -9,18 +9,26 @@
 #include "mex.h"
 #include <limits.h>
 
+#define SEARCH_RADIUS 20
+#define MAX(a,b) ((a) > (b) ? a : b)
+#define MIN(a,b) ((a) < (b) ? a : b)
+
 // (m,n) : size of Ip; (mm,nn):size of the entire image; img, Ip, toFill: mask for Ip, to be filled; sourceRegion for 
 void bestexemplarhelper(const int mm, const int nn, const int m, const int n, 
 			const double *img, const double *Ip, 
                         const double *depth, const double *Dp,
 			const mxLogical *toFill, const mxLogical *sourceRegion,
+      const int center_y, const int center_x,
 			double *best) 
 {
   register int i,j,ii,jj,ii2,jj2,M,N,I,J,ndx,ndx2,mn=m*n,mmnn=mm*nn;
+  register int row_start, row_end;
   double patchErr=0.0,err=0.0,bestErr=1000000000.0;
-  const double alpha = 1.54e-3;
+  const double alpha = 4.0; //4.0
   /* foreach patch */
   N=nn-n+1;  M=mm-m+1;    // Search window boundary.
+  row_start = MAX(1, center_y - SEARCH_RADIUS);
+  row_end = MIN(N, center_y + SEARCH_RADIUS);
   for (j=1; j<=N; ++j) {  // For each column..
     J=j+n-1;
     for (i=1; i<=M; ++i) {
@@ -58,7 +66,7 @@ void bestexemplarhelper(const int mm, const int nn, const int m, const int n,
 /* best = bestexemplarhelper(mm,nn,m,n,img,Ip,toFill,sourceRegion); */
 void mexFunction(int nlhs,mxArray *plhs[],int nrhs,const mxArray *prhs[]) 
 {
-  int mm,nn,m,n;
+  int mm,nn,m,n,center_y,center_x;
   double *img,*Ip,*best;
   double *depth, *Dp;
   mxLogical *toFill,*sourceRegion;
@@ -74,12 +82,13 @@ void mexFunction(int nlhs,mxArray *plhs[],int nrhs,const mxArray *prhs[])
   Dp  = mxGetPr(prhs[7]);            // Depth Gradient patch.
   toFill = mxGetLogicals(prhs[8]);
   sourceRegion = mxGetLogicals(prhs[9]);
-  
+  center_y = (int)mxGetScalar(prhs[10]); // point of patch center.
+  center_x = (int)mxGetScalar(prhs[11]);
   /* Setup the output */
   plhs[0] = mxCreateDoubleMatrix(4,1,mxREAL);
   best = mxGetPr(plhs[0]);
   best[0]=best[1]=best[2]=best[3]=0.0;
 
   /* Do the actual work */
-  bestexemplarhelper(mm,nn,m,n,img,Ip,depth, Dp,toFill,sourceRegion,best);
+  bestexemplarhelper(mm,nn,m,n,img,Ip,depth, Dp,toFill,sourceRegion, center_y, center_x, best);
 }
