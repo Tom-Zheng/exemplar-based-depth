@@ -127,16 +127,4 @@ function [filledDepth] = reconstruct(depth, fillRegion, Dx, Dy, Lap)
     estimatedDepth = A\b;
     filledDepth = depth;
     filledDepth(fillRegion) = estimatedDepth;
-    % error = sum(sum(sqrt((depth - filledDepth).^2)));
 end
-
-% ��Ԫ����1 Reconstruct Gaussian
-
-% depth = gausswin(100)*(gausswin(100))';
-% fillRegion = zeros(100);
-% fillRegion(25:75,25:75) = 1;
-% fillRegion = fillRegion == 1;
-% indexmap = [];
-% filled = reconstruct(depth, fillRegion, indexmap);
-% error = sum(sum(sqrt((depth - filled)^2)));
-% imagesc(filled);

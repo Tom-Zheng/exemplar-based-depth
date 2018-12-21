@@ -27,6 +27,7 @@ function [inpaintedImg,origImg,fillImg,C,D,fillMovie] = inpaint(imgFilename,dept
    
 
 warning off MATLAB:divideByZero
+% Load from files
 [img_hd,depth_hd,fillImg_hd,fillRegion_hd] = loadimgs(imgFilename,depthFilename,fillFilename,fillColor,scaleFactor);
 
 img = imresize(img_hd, scaleFactor);
@@ -34,23 +35,20 @@ depth = imresize(depth_hd, scaleFactor);
 fillImg = imresize(fillImg_hd, scaleFactor);
 fillRegion = imresize(fillRegion_hd, scaleFactor);
 
-
 img = double(img);
 depth = double(depth);
 origImg = img;
 origDepth = depth;
 origFillRegion = fillRegion;
-H_hd = size(origImg, 1);
-W_hd = size(origImg, 2);
 
-% Gradient map
+% Depth gradient map
 [Dx Dy] = gradient(depth);
 depth_gradient = cat(3, Dx, Dy);
 origGradient = depth_gradient;
 
 ind = img2ind(img);
 ind_hd = img2ind(img_hd);        % High resolution index map
-sz = [size(img,1) size(img,2)];
+sz = [size(img,1) size(img,2)];  % Size.
 sourceRegion = ~fillRegion;
 
 
@@ -113,9 +111,6 @@ while any(fillRegion(:))
   
   % Find exemplar that minimizes error, Hq
   [Hq, rowsq, colsq] = bestexemplar(img,img(rows,cols,:),depth_gradient, depth_gradient(rows,cols,:),toFill',sourceRegion, rows(1), cols(1));
-%  [Hq, rowsq, colsq] = bestexemplar(img,img(rows,cols,:),depth, depth(rows,cols),toFill',sourceRegion);
-
-  % [Hq, rowsq, colsq] = bestexemplar_depth(img, depth, img(rows,cols,:), depth(rows,cols), toFill', sourceRegion);
   
   % Update fill region
   toFill = logical(toFill);                 % Marcel 11/30/05
@@ -132,7 +127,7 @@ while any(fillRegion(:))
   depth(rows,cols) = origDepth(ind(rows,cols));
   depth_gradient(rows,cols,:) = ind2img_n(ind(rows,cols),origGradient,2);
   
-  % high resolution
+  % Transfer high resolution RGB patch simultaniously
   rows_hd = floor(rows(1)/scaleFactor)-1:floor(rows(1)/scaleFactor)+floor((length(rows)-1)/scaleFactor);
   cols_hd = floor(cols(1)/scaleFactor)-1:floor(cols(1)/scaleFactor)+floor((length(cols)-1)/scaleFactor);
   rowsq_hd = floor(rowsq(1)/scaleFactor)-1:floor(rowsq(1)/scaleFactor)+floor((length(rowsq)-1)/scaleFactor);
@@ -152,20 +147,19 @@ end
 
 inpaintedImg=img;
 
-% Depth
+%  Depth Reconstruction and high resolution interpolation. 
 reconstructedDepth = reconstruct(depth, origFillRegion, depth_gradient(:,:,1), depth_gradient(:,:,2));
 reconstructedDepthScaled = imresize(reconstructedDepth, 'OutputSize', size(depth_hd));
 fillDepth = depth_hd;
 fillDepth(fillRegion_hd) = reconstructedDepthScaled(fillRegion_hd);
 
+% Output depth
 imwrite(uint8(fillDepth), strcat('inpainted_', depthFilename));
-% High resolution
+% High resolution RGB
 inpaintedImgHD=ind2img(ind_hd, img_hd);
 
+% Output image 
 imwrite(uint8(inpaintedImgHD), strcat('inpainted_', imgFilename));
-% imwrite(uint8(inpaintedImgHD), 'output_hd.png');
-
-% imshow(depth_gradient(:,:,1));
 
 %---------------------------------------------------------------------
 % Scans over the entire image (with a sliding window)
@@ -177,45 +171,6 @@ best = bestexemplarhelper(mm,nn,m,n,img,Ip,depth,Dp,toFill,sourceRegion,center_y
 Hq = sub2ndx(best(1):best(2),(best(3):best(4))',mm);
 rows = best(1):best(2);
 cols = best(3):best(4);
-
-% New bestexemplar
-
-function [Hq, rows, cols] = bestexemplar_depth(img, depth, Ip, Dp, toFill, sourceRegion)
-imageSize = size(img);
-depthSize = size(depth);
-assert(~any(depthSize(1:2) ~= imageSize(1:2)),'Depth map should have the same size with image');
-
-H = imageSize(1);
-W = imageSize(2);
-h = size(Ip, 1);         % size of patch
-w = size(Ip, 2);
-
-Filled = ~toFill;
-alpha = 1.54e-4;           % Scalar parameter for depth
-
-errorMap = Inf(H-h+1, W-w+1);
-
-% for all patches
-parfor j = 1:H-h+1
-    for i = 1:W-w+1
-        if (any(any(~sourceRegion(j:j+h-1,i:i+w-1))))  % Skip Fillregion
-            continue; 
-        end
-        templatePatch = img(j:j+h-1,i:i+w-1,:);
-        templatePatchDepth = depth(j:j+h-1,i:i+w-1);
-        errorMap(j,i) = sum(sum(((templatePatch(:,:,1) - Ip(:,:,1)).*Filled).^2)) ...
-                      + sum(sum(((templatePatch(:,:,2) - Ip(:,:,2)).*Filled).^2)) ...
-                      + sum(sum(((templatePatch(:,:,3) - Ip(:,:,3)).*Filled).^2)) ...
-              + alpha * sum(sum(((templatePatchDepth - Dp).*Filled).^2));        % calculate error (L2 norm over all filled pix within the patch)
-    end
-end
-
-[argvalue, argmin] = min(errorMap(:));
-[J,I] = ind2sub(size(errorMap), argmin);
-
-rows = J:J+h-1;
-cols = I:I+w-1;
-Hq = sub2ndx(J:J+h-1,(I:I+w-1)',H);
 
 %---------------------------------------------------------------------
 % Returns the indices for a 9x9 patch centered at pixel p.
@@ -264,9 +219,9 @@ depth = imread(depthFilename);
 
 % NYU Depth crop
 
-img = img(7:474, 8:632, :);
-fillImg = fillImg(7:474, 8:632, :);
-depth = depth(7:474, 8:632);
+% img = img(7:474, 8:632, :);
+% fillImg = fillImg(7:474, 8:632, :);
+% depth = depth(7:474, 8:632);
 
 if(size(fillImg,3)>1)
     fillRegion = fillImg(:,:,1)==fillColor(1) & fillImg(:,:,2)==fillColor(2) & fillImg(:,:,3)==fillColor(3);
